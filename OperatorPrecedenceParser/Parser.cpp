@@ -56,10 +56,10 @@ void GetInput(vector<gramma_pair_t>& gramma)
 	{
 		string input_temp;
 		getline(cin, input_temp);
-		if (input_temp.back() == '#')
+		if (input_temp.front() == '#')
 			break;
 
-		if (input_temp.find_first_of("->") == string::npos || input_temp.find_first_of("|") == string::npos)
+		if (input_temp.find("->") == string::npos)
 			error("输入错误!");
 		replace(input_temp.begin(), input_temp.end(), '|', ' ');
 		stringstream ss(input_temp.substr(0, input_temp.find_first_of("->")));
@@ -95,8 +95,8 @@ vt_set_t FindVT(vector<gramma_pair_t> gramma, const bool order)
 	vt_set_t vt_set;
 	map<char, map<char, bool>> Fmatrix;
 	stack<pair<char, char>> pair_stack;
-	for (auto gramma_pair : gramma)
-		for (auto str : gramma_pair.second)
+	for (auto gramma_pair : gramma)// 对于文法的每一项
+		for (auto str : gramma_pair.second)// 对于每一个产生式
 		{
 			if (order == LASTVT)
 				reverse(str.begin(), str.end());
@@ -136,9 +136,9 @@ vt_set_t FindVT(vector<gramma_pair_t> gramma, const bool order)
 
 /**
  * \brief 获得优先级表
- * \param gramma 
- * \param first_vt 
- * \param last_vt 
+ * \param gramma 文法
+ * \param first_vt FIRST集
+ * \param last_vt LAST集
  * \return 优先级表
  */
 map<char, map<char, int>> GetRelationshipTable(const vector<gramma_pair_t>& gramma, const vt_set_t& first_vt,
@@ -159,6 +159,7 @@ map<char, map<char, int>> GetRelationshipTable(const vector<gramma_pair_t>& gram
 					all_vt.insert(*it);
 				if (TerminalSymbolQ(*(it + 1)))
 					all_vt.insert(*(it + 1));
+				//  IF  Xi和Xi+1均为终结符  THEN  置Xi = Xi+1
 				if (TerminalSymbolQ(*it) && TerminalSymbolQ(*(it + 1)))
 				{
 					if (relationship_table.find(*it) != relationship_table.end() &&
@@ -166,6 +167,8 @@ map<char, map<char, int>> GetRelationshipTable(const vector<gramma_pair_t>& gram
 						error("非算符优先文法！");
 					relationship_table[*it][*(it + 1)] = 0;
 				}
+				//  IF  i<n-2且Xi和Xi+2都为终结符
+				// 但Xi + 1为非终结符  THEN  置Xi = Xi + 2；
 				if (str.size() >= 3 && it <= str.end() - 3 && TerminalSymbolQ(*it) && !TerminalSymbolQ(
 					*(it + 1)) && TerminalSymbolQ(*(it + 2)))
 				{
@@ -174,6 +177,9 @@ map<char, map<char, int>> GetRelationshipTable(const vector<gramma_pair_t>& gram
 						error("非算符优先文法！");
 					relationship_table[*it][*(it + 2)] = 0;
 				}
+				// IF  Xi为终结符而Xi+1为非终结符  THEN
+				// FOR  FIRSTVT(Xi + 1)中的每个a  DO
+				// 置 Xi < a；
 				if (TerminalSymbolQ(*it) && !TerminalSymbolQ(*(it + 1)))
 					for (auto a : first_vt.at(*(it + 1)))
 					{
@@ -182,6 +188,9 @@ map<char, map<char, int>> GetRelationshipTable(const vector<gramma_pair_t>& gram
 							error("非算符优先文法！");
 						relationship_table[*it][a] = -1;
 					}
+				// IF  Xi为非终结符而Xi+1为终结符  THEN
+				// FOR  LASTVT(Xi)中的每个a   DO
+				// 置  a > Xi + 1
 				if (!TerminalSymbolQ(*it) && TerminalSymbolQ(*(it + 1)))
 					for (auto a : last_vt.at(*it))
 					{
@@ -209,6 +218,7 @@ map<char, map<char, int>> GetRelationshipTable(const vector<gramma_pair_t>& gram
  */
 string::const_iterator FindLeftmostPrimePhrase(const string& cs, map<char, map<char, int>> relationship_table)
 {
+	// cs是倒过来的
 	auto it = cs.end() - 1;
 	auto next_nt = it;
 	while (true)
@@ -303,23 +313,24 @@ TreeNode* Analyze(string input, const map<char, map<char, int>>& relationship_ta
 {
 	vector<TreeNode*> nodes;
 	string char_stack;
-	//	vector<string> leftmost_prime_phrases;
+
 	cout << endl << "符号栈\t\t\t输入串\t\t\t关系\t\t\t操作\t\t\t最左素短语" << endl;
+	// 由于要对input作为栈操作，需要倒置
 	reverse(input.begin(), input.end());
 	char_stack.push_back('#');
 	while (!input.empty())
 	{
 		cout << setw(24) << left << char_stack;
+		// input是倒置的，输出时需要反转一下
 		reverse(input.begin(), input.end());
 		cout << setw(24) << left << input;
 		reverse(input.begin(), input.end());
+		// char_stack是倒置的，end为栈顶
 		auto stack_top = char_stack.end();
 		while (!TerminalSymbolQ(*--stack_top));
 
 		if (relationship_table.at(*stack_top).find(input.back()) == relationship_table.at(*stack_top).end())
-		{
 			error("非文法的符号或无优先级");
-		}
 		else if (relationship_table.at(*stack_top).at(input.back()) != 1)// 移进
 		{
 			if (relationship_table.at(*stack_top).at(input.back()) == 0)
@@ -339,7 +350,7 @@ TreeNode* Analyze(string input, const map<char, map<char, int>>& relationship_ta
 			const auto it = FindLeftmostPrimePhrase(char_stack, relationship_table);
 			// 提取最左素短语
 			auto leftmost_prime_phrase = char_stack.substr(it - char_stack.begin());
-			reverse(leftmost_prime_phrase.begin(), leftmost_prime_phrase.end());
+//			reverse(leftmost_prime_phrase.begin(), leftmost_prime_phrase.end());
 			cout << leftmost_prime_phrase;
 			char_stack.erase(it, char_stack.end());
 			char_stack.push_back('N');
@@ -392,6 +403,7 @@ void PrintNode(TreeNode* node, int depth)
 int main()
 {
 	vector<gramma_pair_t> gramma;
+	cout << "请输入文法，以一行#结束" << endl;
 	GetInput(gramma);
 
 	const vt_set_t first_vt = FindVT(gramma, FIRSTVT);
